@@ -1,0 +1,35 @@
+---
+- name: Apply Windows OS patches if available
+  hosts: 10.1.0.18
+  gather_facts: yes
+  become: yes
+  vars:
+    update_categories:
+      - SecurityUpdates
+      - CriticalUpdates
+      - Updates  # Add other categories if needed
+    reboot_if_needed: true
+
+  tasks:
+    - name: Check and install Windows updates
+      win_updates:
+        category_names: "{{ update_categories }}"
+        state: installed
+        reboot: "{{ reboot_if_needed }}"
+      register: update_result
+
+    - name: Show message if machine is up to date
+      debug:
+        msg: "Machine is up to date"
+      when: update_result.updates | length == 0
+
+    - name: Show updates installed
+      debug:
+        msg: "Installed updates: {{ update_result.updates }}"
+      when: update_result.updates | length > 0
+
+    - name: Reboot if required after updates
+      win_reboot:
+        msg: "Rebooting after Windows updates"
+        reboot_timeout: 600
+      when: update_result.reboot_required
