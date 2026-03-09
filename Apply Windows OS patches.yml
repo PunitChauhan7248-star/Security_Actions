@@ -1,34 +1,53 @@
 ---
-- name: Apply Windows OS patches if available
+- name: Windows Server Patching
   hosts: 10.1.0.18
   gather_facts: yes
+
   vars:
     update_categories:
-      - SecurityUpdates
       - CriticalUpdates
-      - Updates  # Add other categories if needed
-    reboot_if_needed: true
+      - SecurityUpdates
+      - UpdateRollups
+      - Updates
+      - DefinitionUpdates
 
   tasks:
-    - name: Check and install Windows updates
-      win_updates:
-        category_names: "{{ update_categories }}"
-        state: installed
-        reboot: "{{ reboot_if_needed }}"
-      register: update_result
 
-    - name: Show message if machine is up to date
-      debug:
-        msg: "Machine is up to date"
-      when: update_result.updates | length == 0
+  - name: Scan for available Windows updates
+    win_updates:
+      category_names: "{{ update_categories }}"
+      state: searched
+    register: scan_result
 
-    - name: Show updates installed
-      debug:
-        msg: "Installed updates: {{ update_result.updates }}"
-      when: update_result.updates | length > 0
+  - name: Show available updates
+    debug:
+      msg: "{{ scan_result.updates }}"
+    when: scan_result.found_update_count > 0
 
-    - name: Reboot if required after updates
-      win_reboot:
-        msg: "Rebooting after Windows updates"
-        reboot_timeout: 600
-      when: update_result.reboot_required
+  - name: Show message if system is up to date
+    debug:
+      msg: "No updates available"
+    when: scan_result.found_update_count == 0
+
+
+  - name: Install Windows updates
+    win_updates:
+      category_names: "{{ update_categories }}"
+      state: installed
+      reboot: yes
+      reboot_timeout: 1800
+    register: install_result
+    when: scan_result.found_update_count > 0
+
+
+  - name: Show installed updates
+    debug:
+      msg: "{{ install_result.updates }}"
+    when: install_result.installed_update_count is defined
+
+
+  - name: Reboot if required after updates
+    win_reboot:
+      msg: "Rebooting system after Windows updates"
+      reboot_timeout: 1800
+    when: install_result.reboot_required | default(false)
