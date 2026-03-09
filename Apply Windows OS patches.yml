@@ -1,5 +1,5 @@
 ---
-- name: Windows Server Patching
+- name: Windows Server Patching Automation
   hosts: 10.1.0.18
   gather_facts: yes
 
@@ -19,35 +19,48 @@
       state: searched
     register: scan_result
 
-  - name: Show available updates
+  - name: Display number of updates found
     debug:
-      msg: "{{ scan_result.updates }}"
+      msg: "Total updates available: {{ scan_result.found_update_count }}"
+
+  - name: Show list of available updates
+    debug:
+      var: scan_result.updates
     when: scan_result.found_update_count > 0
 
-  - name: Show message if system is up to date
+  - name: Show message if system is already up to date
     debug:
-      msg: "No updates available"
+      msg: "No updates available on this server"
     when: scan_result.found_update_count == 0
 
 
-  - name: Install Windows updates
+  - name: Install Windows updates (multiple passes until system fully patched)
     win_updates:
       category_names: "{{ update_categories }}"
       state: installed
       reboot: yes
       reboot_timeout: 1800
-    register: install_result
+    register: update_result
+    until: update_result.found_update_count == 0
+    retries: 5
+    delay: 120
     when: scan_result.found_update_count > 0
 
 
-  - name: Show installed updates
+  - name: Display installed update count
     debug:
-      msg: "{{ install_result.updates }}"
-    when: install_result.installed_update_count is defined
+      msg: "Installed updates: {{ update_result.installed_update_count }}"
+    when: update_result.installed_update_count is defined
 
 
-  - name: Reboot if required after updates
+  - name: Show installed update details
+    debug:
+      var: update_result.updates
+    when: update_result.updates is defined
+
+
+  - name: Reboot system if required
     win_reboot:
-      msg: "Rebooting system after Windows updates"
+      msg: "Rebooting after Windows patch installation"
       reboot_timeout: 1800
-    when: install_result.reboot_required | default(false)
+    when: update_result.reboot_required | default(false)
